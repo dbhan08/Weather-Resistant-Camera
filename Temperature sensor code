@@ -1,0 +1,78 @@
+#include "stm32f4xx_hal.h"
+#include "gpio.h"
+#include "stdio.h"
+
+// Define GPIO Pins for LEDs (Change these to match your setup)
+#define LED1_PIN GPIO_PIN_0  // LED1 on PA0
+#define LED2_PIN GPIO_PIN_1  // LED2 on PA1
+#define LED3_PIN GPIO_PIN_4  // LED3 on PA4
+#define ONBOARD_LED_PIN GPIO_PIN_5 // Onboard LED on PA5
+
+#define LED_GPIO_PORT GPIOA  // GPIO port where LEDs are connected
+
+// Function to initialize LEDs (configure GPIO pins)
+void LED_Init(void) {
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();  // Enable GPIOA clock
+
+    // Configure LED pins as output
+    GPIO_InitStruct.Pin = LED1_PIN | LED2_PIN | LED3_PIN | ONBOARD_LED_PIN; // Include onboard LED
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;  // Push-pull mode
+    GPIO_InitStruct.Pull = GPIO_NOPULL;  // No pull-up or pull-down resistors
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;  // Low speed
+
+    HAL_GPIO_Init(LED_GPIO_PORT, &GPIO_InitStruct);  // Initialize GPIO
+}
+
+// Function to flash the onboard LED
+void Flash_Onboard_LED(int times) {
+    for (int i = 0; i < times; i++) {
+        HAL_GPIO_WritePin(LED_GPIO_PORT, ONBOARD_LED_PIN, GPIO_PIN_SET); // Turn on LED
+        HAL_Delay(200);  // Delay for 200ms
+        HAL_GPIO_WritePin(LED_GPIO_PORT, ONBOARD_LED_PIN, GPIO_PIN_RESET); // Turn off LED
+        HAL_Delay(200);  // Delay for 200ms
+    }
+}
+
+// Function to turn on specific LEDs based on temperature
+void Control_LEDs(float temperature) {
+    // Turn off all LEDs initially
+
+    // Control LEDs based on temperature ranges
+    if (temperature < 10.0f) {
+        // If temperature is below 10°C, turn on LED1
+        HAL_GPIO_WritePin(LED_GPIO_PORT, LED1_PIN, GPIO_PIN_SET);
+    } else if (temperature >= 10.0f && temperature <= 20.0f) {
+        // If temperature is between 10°C and 20°C, turn on LED2 and flash onboard LED
+        HAL_GPIO_WritePin(LED_GPIO_PORT, LED2_PIN, GPIO_PIN_SET);
+        Flash_Onboard_LED(15); // Flash the onboard LED 15 times
+    } else if (temperature > 20.0f) {
+        // If temperature is above 20°C, turn on LED3
+        HAL_GPIO_WritePin(LED_GPIO_PORT, LED3_PIN, GPIO_PIN_SET);
+    }
+}
+
+int main(void) {
+    HAL_Init();  // Initialize the HAL Library
+
+    // Initialize LEDs
+    LED_Init();
+
+    // Example temperature input
+    float temperature = 5.0f;  // You can change this to test different temperatures
+
+    while (1) {
+        // Control LEDs based on the input temperature
+        Control_LEDs(temperature);
+
+        HAL_Delay(1000);  // Delay to simulate temperature reading update
+    }
+}
+
+// Error handler for any issues
+void Error_Handler(void) {
+    while (1) {
+        // Stay here if there is an error
+    }
+}
