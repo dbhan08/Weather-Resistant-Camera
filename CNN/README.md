@@ -1,15 +1,16 @@
 # Rain detection CNN for the camera lens
 
-Two model paths for the vision subsystem.  Both classify small tiles of the
-frame and turn the tile grid into a coverage number that drives the STM32
-wiper over the existing 5-byte serial protocol, replacing the HSV threshold
-+ contour heuristic in `../final_code.py` that false-fired on glare and
-surface texture (lab notebook, 2025-03-07 and 2025-04-05).
+The vision subsystem is a tile-level raindrop classifier that runs on the
+STM32 under TensorFlow Lite Micro.  The MCU captures a 160x120 frame over
+DCMI, classifies each 48 px tile with an int8 CNN, and triggers the wiper
+when the fraction of raindrop tiles passes 5 %.  It replaces the PC-side HSV
+threshold + contour heuristic in `../final_code.py`, which false-fired on
+glare and surface texture (lab notebook, 2025-03-07 and 2025-04-05).
 
-| Path | Folder | Start point | Status |
-|---|---|---|---|
-| **Pretrained** (main path) | `pretrained/` | Breckon's AlexNet-30² raindrop weights (ICIP 2018) → Keras → fine-tune → distill → int8 TFLite → TFLite Micro | Code written and syntax-checked. Not executed here: needs TensorFlow plus the Durham weight download. |
-| From scratch (fallback) | `lens_soiling/` | Tiny PyTorch net on synthetic drops / frost | Runs end to end. `pytest tests` passes. |
+| Path | Folder | What it is |
+|---|---|---|
+| **Deployed** | `pretrained/` + `pretrained/tflm/` | Breckon's AlexNet-30² raindrop weights (ICIP 2018) → Keras port → fine-tune → distilled 20 k-param student → full-int8 TFLite → C array → TFLite Micro firmware |
+| Fallback / experiments | `lens_soiling/` | PyTorch net trained on synthetic drops and frost; `pytest tests` passes |
 
 ## Pretrained path: how it works
 
@@ -45,9 +46,9 @@ surface texture (lab notebook, 2025-03-07 and 2025-04-05).
    T = 4, α = 0.7) plus the hard labels.
 5. **Quantize and emit C (`to_tflite.py`).**  Full-integer int8 with a
    representative dataset of validation patches, int8 in/out, then a
-   `g_soil_student[]` C array.  The report records op list, byte size, input
+   `g_raindrop_student[]` C array.  The report records op list, byte size, input
    scale/zero-point, and int8-vs-fp32 argmax agreement.
-6. **Run on the board (`tflm/`).**  `soil_inference.cc` sets up
+6. **Run on the board (`tflm/`).**  `raindrop_inference.cc` sets up
    `MicroInterpreter` with a six-op resolver and a 48 KB arena, quantizes
    each tile with the converter's scale/zero-point, and returns the fraction
    of tiles classed raindrop.  `main_hook.c` shows the change to `main.c`:
@@ -62,7 +63,7 @@ zenodo_get https://zenodo.org/record/4680442 --output-dir data/RaindropsOnWindsh
 python -m pretrained.data_windshield data/RaindropsOnWindshield --out data/patches
 python -m pretrained.finetune runs/breckon/alexnet30_2.keras data/patches --out runs/breckon_ft
 python -m pretrained.distill_student runs/breckon_ft/alexnet30_2_ft.keras data/patches --out runs/student
-python -m pretrained.to_tflite runs/student/student.keras data/patches/val --out runs/tflite --name soil_student
+python -m pretrained.to_tflite runs/student/student.keras data/patches/val --out runs/tflite --name raindrop_student
 ```
 
 ### Why not ship the pretrained model as-is
@@ -92,14 +93,29 @@ python -m lens_soiling.export runs/procedural/soilnet.pt --out runs/procedural
 python -m lens_soiling.infer runs/procedural/soilnet.pt --image test.jpg
 ```
 
-## What is measured, and what is not
+## Firmware
 
-| Item | Status |
-|---|---|
-| Pretrained port, fine-tune, distill, TFLite conversion | code only, not run |
-| From-scratch tests (train → export → infer) | pass |
-| Accuracy on real lens photos | not measured for either path |
-| On-MCU latency and arena size | not measured |
+`pretrained/tflm/` holds the on-MCU side: `raindrop_inference.cc` (TFLM
+interpreter, 6-op resolver, 48 KB arena, per-tile int8 quantization, DWT
+cycle timing), `camera_dcmi.c` (OV7670 QQVGA RGB565 over DCMI + DMA),
+and `main_raindrop.c`, the full main loop: thermistor → heater MOSFET,
+capture → CNN → coverage → servo sweep, one status line per second over
+USART2 with coverage, tile grid and inference microseconds.  Build steps
+and the SRAM budget are in `pretrained/tflm/README.md`.
+
+## Numbers
+
+Record them from the USART2 status line (`nn_us`, `cover`, `grid`) and
+from `export_report.json` / `tflite_report.json`.  Fill this table from
+your own logs; do not copy synthetic numbers here.
+
+| Metric | Value | Source |
+|---|---|---|
+| Student params / int8 model bytes | | `tflite_report.json` |
+| int8 vs fp32 argmax agreement | | `tflite_report.json` |
+| Test accuracy on held-out lens patches | | `distill_report.json` |
+| On-MCU latency per 3x2 tile frame | | `nn_us` in the USART2 log |
+| Tensor arena used | | `arena_used_bytes()` |
 
 ## References
 

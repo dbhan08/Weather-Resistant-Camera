@@ -67,7 +67,7 @@ def build_student(width: float = 1.0, num_classes: int = len(CLASSES)) -> keras.
     x = L.GlobalAveragePooling2D()(x)
     x = L.Dropout(0.1)(x)
     out = L.Dense(num_classes, name="logits")(x)     # logits; softmax applied in loss / on MCU
-    return keras.Model(inp, out, name=f"soil_student_w{width}")
+    return keras.Model(inp, out, name=f"raindrop_student_w{width}")
 
 
 class Distiller(keras.Model):

@@ -1,7 +1,7 @@
 """Convert a Keras model to full-integer int8 TFLite and a C array for TFLM.
 
     python -m pretrained.to_tflite runs/student/student.keras data/patches/val \
-        --out runs/student --name soil_student
+        --out runs/student --name raindrop_student
 
 Writes:
   <name>_fp32.tflite     reference
@@ -15,7 +15,7 @@ ranges per tensor.  Using val patches (not train) avoids tuning the ranges
 on the same images the weights were fitted to.
 
 Input scale/zero-point are read from the .tflite and printed; the firmware
-must apply the same mapping (see tflm/soil_inference.cc).
+must apply the same mapping (see tflm/raindrop_inference.cc).
 """
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def main() -> None:
     ap.add_argument("model")
     ap.add_argument("rep_folder", help="folder of representative patches (use val/)")
     ap.add_argument("--out", default="runs/tflite")
-    ap.add_argument("--name", default="soil_student")
+    ap.add_argument("--name", default="raindrop_student")
     ap.add_argument("--n-rep", type=int, default=300)
     a = ap.parse_args()
 
