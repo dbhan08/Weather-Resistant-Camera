@@ -341,7 +341,18 @@ story += [Paragraph("5. The vision: how the chip decides the lens is wet", H1),
                "conv.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]\n"
                "conv.inference_input_type = conv.inference_output_type = tf.int8\n"
                "open(\"raindrop_student_int8.tflite\", \"wb\").write(conv.convert())\n"
-               "# then: alignas(16) const unsigned char g_raindrop_student[] = { 0x1c, 0x00, ... };"),
+               "\n"
+               "# write_c_array(): the .tflite bytes become a normal C source file\n"
+               "body = \",\".join(f\"0x{b:02x}\" for b in model_bytes)\n"
+               "write(f\"alignas(16) const unsigned char g_raindrop_student[] = {{{body}}};\")\n"
+               "write(f\"const unsigned int g_raindrop_student_len = {len(model_bytes)};\")"),
+          p("How that array ends up in flash: on a microcontroller, anything declared <i>const</i> is placed by the "
+            "linker in the read-only data section, and that section lives in the flash address range. So compiling "
+            "raindrop_student_int8.cc into the firmware and flashing the board puts the weights in flash with the "
+            "rest of the program. No copying code is needed. At run time TensorFlow Lite Micro reads the model "
+            "straight from that address (<i>tflite::GetModel(g_raindrop_student)</i> returns a pointer, not a copy), "
+            "so the weights never take up any SRAM. Only the 48 KB working arena does. The alignas(16) is there "
+            "because the library reads the model with 16-byte aligned loads."),
           Paragraph("5.7 Step 5: run it on the chip (TensorFlow Lite Micro)", H2),
           p("TensorFlow Lite Micro (TFLM) is a small C++ library that runs .tflite models on microcontrollers with no "
             "operating system and no dynamic memory. You give it the model bytes, a list of which layer types to "
