@@ -1,93 +1,50 @@
-# Test
+# Weather-Resistant Camera
 
+An STM32-based enclosure that keeps a camera lens usable in rain and frost.
+A vision model on the host PC (or, with the TFLite Micro path, on the MCU)
+detects water on the lens and triggers a servo wiper; an on-die thermistor
+turns a heating pad on below a threshold.  UIUC ECE 445 senior design,
+Spring 2025.
 
+## Run it
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.engr.illinois.edu/camras3/test.git
-git branch -M main
-git push -uf origin main
+```bash
+# firmware: open Final.ioc in STM32CubeIDE, build main.c, flash the Nucleo-F4
+# vision (original OpenCV heuristic):
+python final_code.py               # webcam -> HSV mask -> % coverage -> "START" over serial
+# vision (CNN, see CNN/README.md):
+python -m lens_soiling.infer runs/procedural/soilnet.pt --camera 1 --port COM3
 ```
 
-## Integrate with your tools
+## How it works
 
-- [ ] [Set up project integrations](https://gitlab.engr.illinois.edu/camras3/test/-/settings/integrations)
+- **Firmware (`main.c`).**  TIM2 PWM drives the servo; `Set_Servo_Angle`
+  maps 0–180° to a 210–1050 tick pulse.  ADC1 reads the internal temperature
+  sensor with the factory `TS_CAL1/2` calibration, and drives a MOSFET on PA5
+  to switch the heater.  USART2 at 115200 baud accepts 5-byte commands
+  (`START`, `STOPP`) from the PC; `START` sweeps the wiper 60→115→60°.
+- **Vision, heuristic (`final_code.py`).**  HSV threshold on low saturation
+  and high value, morphological close, contours, enclosing circles, then
+  percent of masked pixels.  Over 5 % sends `START`.
+- **Vision, CNN (`CNN/`).**  Tile-level classifier: a ported pretrained
+  raindrop CNN distilled into a ~20 k-parameter int8 model for TFLite Micro,
+  plus a tested PyTorch fallback trained on synthetic drops and frost.
+- **Hardware.**  KiCad PCB (`PCB Design*/`), 5 V and 3.3 V regulators, MOSFET
+  heater switch, logic-level shifter, servo header.  Demo ran on the Nucleo
+  dev board after the second PCB's MCU was damaged during hand soldering.
 
-## Collaborate with your team
+## Layout
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+```
+main.c, Final.ioc          STM32 firmware and CubeMX project
+final_code.py              OpenCV heuristic + serial trigger (PC)
+python_to_stm_comm.py      serial protocol smoke test
+CNN/                       CNN detection: pretrained port + from-scratch pipeline
+Servo Motor code/, Temperature sensor code/   subsystem test firmware
+PCB Design*/               KiCad
+Lab Notebooks/             per-member design logs
+```
 
-## Test and Deploy
+## Stack
 
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+C (STM32 HAL), Python, OpenCV, PyTorch, TensorFlow Lite Micro, KiCad.

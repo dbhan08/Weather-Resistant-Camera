@@ -1,0 +1,8 @@
+torch>=2.1
+numpy>=1.21
+pillow>=9
+pytest>=7
+# optional
+# onnx>=1.14          # for lens_soiling.export ONNX file
+# opencv-python>=4.8  # for the live camera loop in lens_soiling.infer
+# pyserial>=3.5       # for talking to the STM32
